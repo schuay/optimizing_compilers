@@ -1,0 +1,121 @@
+SET
+
+DOMAIN
+  ConstantLattice = flat(snum)
+  ConstantFunc = VariableId -> ConstantLattice
+  OpEnum = (ADD, SUB, MUL, DIV || ADD | DIV)
+ENDDOMAIN
+
+PROBLEM ConstantPropagation
+  direction:  forward
+  carrier:    ConstantFunc
+  init_start: [-> bot]
+  init:       [-> top]
+
+  equal:      constlattice_equal
+  combine:    constlattice_combine
+  retfunc:    constlattice_combine
+  widening:   constlattice_combine
+
+TRANSFER
+
+ExprStatement(expr), _:
+  transfer(expr, @);
+
+ScopeStatement(WhileStmt(ExprStatement(expr))), _:
+  transfer(expr, @);
+
+ScopeStatement(IfStmt(ExprStatement(expr))), _:
+  transfer(expr, @);
+
+WhileJoin(), _: @;
+IfJoin(), _: @;
+
+DeclareStmt(var_symbol, type), _:
+  let varid = varsym_varid(var_symbol);
+  in  @ \ [ varid -> top ];
+UndeclareStmt(variables), _: @;
+
+FunctionEntry(name), _: @;
+FunctionExit(name, local_vars), _: @;
+
+statement, _:
+  println("warning: cannot handle ",
+          "statement of the form: ",
+          stmt_asttext(statement))
+  @;
+
+SUPPORT
+
+transfer :: Expression, ConstantFunc -> ConstantFunc;
+transfer(expr, const_func) =
+  case expr of
+    AssignOp(lhs, rhs) => const_func \ [ varref_varid(lhs) ->
+                                         value_of(rhs, const_func)
+                                       ];
+    EqualityOp(_, _) => const_func;
+    LessThanOp(_, _) => const_func;
+    LessOrEqualOp(_, _) => const_func;
+    _ => println("warning: unsupported expression in transfer: ",
+                 expr_asttext(expr))
+         const_func;
+  endcase;
+
+constlattice_op :: OpEnum, ConstantLattice, ConstantLattice -> ConstantLattice;
+constlattice_op (op, lhs, rhs) =
+  if ((lhs = bot) || (rhs = bot)) then bot
+  else if ((lhs = top) || (rhs = top)) then top
+  else if ((op = DIV) && (drop(rhs) = 0)) then bot
+  else let lval <= lhs;
+           rval <= rhs;
+       in lift(snum_op(op, lval, rval));
+       
+snum_op :: OpEnum, snum, snum -> snum;
+snum_op(op, lhs, rhs) =
+  case op of
+    ADD => lhs + rhs;
+    SUB => lhs - rhs;
+    MUL => lhs * rhs;
+    DIV => lhs / rhs;
+    _   => println("Unsupported operation in constlattice_op")
+           -1;
+  endcase;
+
+value_of :: Expression, ConstantFunc -> ConstantLattice;
+value_of(expr, const_func) =
+  case expr of
+    IntVal(value) => lift(val-astint(value));
+    VarRefExp(_) => const_func{!varref_varid(expr)!};
+    AddOp(lhs, rhs) =>
+      let lval = value_of(lhs, const_func);
+          rval = value_of(rhs, const_func);
+      in  constlattice_op(ADD, lval, rval);
+    SubtractOp(lhs, rhs) =>
+      let lval = value_of(lhs, const_func);
+          rval = value_of(rhs, const_func);
+      in  constlattice_op(SUB, lval, rval);
+    MultiplyOp(lhs, rhs) =>
+      let lval = value_of(lhs, const_func);
+          rval = value_of(rhs, const_func);
+      in  constlattice_op(MUL, lval, rval);
+    DivideOp(lhs, rhs) =>
+      let lval = value_of(lhs, const_func);
+          rval = value_of(rhs, const_func);
+      in  constlattice_op(DIV, lval, rval);
+    IntegerDivideOp(lhs, rhs) =>
+      let lval = value_of(lhs, const_func);
+          rval = value_of(rhs, const_func);
+      in  constlattice_op(DIV, lval, rval);
+    _ => println("warning: unsupported expression in value_of: ",
+                 expr_asttext(expr))
+         bot;
+  endcase;
+
+meet :: ConstantLattice, ConstantLattice -> ConstantLattice;
+meet(lhs, rhs) = (lhs glb rhs);
+
+constlattice_equal :: ConstantFunc, ConstantFunc -> bool;
+constlattice_equal(f, g) = (f = g);
+
+constlattice_combine :: ConstantFunc, ConstantFunc -> ConstantFunc;
+constlattice_combine(f, g) = crunch(f, g, meet);
