@@ -1,0 +1,51 @@
+SET
+
+
+DOMAIN
+  DominatorSet
+      = set(snum)
+  DominatorLattice
+      = lift(DominatorSet)
+ENDDOMAIN
+
+
+PROBLEM Dominators
+  direction:  forward
+  carrier:    DominatorLattice
+  init_start: lift({})
+  init:       top
+
+  equal:      domlattice_equal
+  combine:    domlattice_combine
+  retfunc:    domlattice_combine
+  widening:   domlattice_combine
+
+
+TRANSFER
+
+WhileJoin(), _: @;
+IfJoin(), _: @;
+
+statement, _:
+  let dominators <= @;
+  in lift(transfer(label, dominators));
+
+
+SUPPORT
+
+transfer :: snum, DominatorSet -> DominatorSet;
+transfer(label, dominators) =
+  let kill_set = {};
+      gen_set  = {label};
+  in  union(subtract(dominators, kill_set), gen_set);
+
+subtract :: DominatorSet, DominatorSet -> DominatorSet;
+subtract(a, b) = { v  !!  v <-- a,  if !(v ? b) };
+
+domlattice_equal :: DominatorLattice, DominatorLattice
+                    -> bool;
+domlattice_equal(a, b) = (a = b);
+
+domlattice_combine :: DominatorLattice, DominatorLattice
+                      -> DominatorLattice;
+domlattice_combine(a, b) = (a glb b);

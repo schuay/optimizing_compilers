@@ -1,0 +1,56 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{comment}
+\usepackage[pdfborder={0 0 0}]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+
+\lstset{
+    language=C++,
+    basicstyle=\ttfamily,
+    captionpos=b,
+    breaklines=true,
+    breakatwhitespace=false,
+    showspaces=false,
+    showtabs=false,
+    numbers=left,
+}
+
+\title{Aufgabe 1: Dominator-Analyse \\
+       Optimierende Übersetzer WS 2014/2015 \\
+       Technical University of Vienna}
+\author{Jakob Gruber, 0203440 \\
+        Mino Sharkhawy, 1025887}
+
+\begin{document}
+
+\maketitle
+
+\section{Intraprozedurale Dominator-Analyse}
+
+In der Dominator-Analyse ist das Killset für alle Blöcke leer und das Genset enthält
+nur das Blocklabel selbst. $DA_{\circ}$ wird aus dem Durchschnitt der $DA_{\bullet}$
+aller Vorgänger gebildet.
+
+\begin{align*}
+        gen_{DA}(B^\ell) &= \{\ell\} & B^\ell \in blocks(S_\star) \\
+        kill_{DA}(B^\ell) &= \{\} & B^\ell \in blocks(S_\star) \\
+        DA_{\circ}(\ell) &=
+        \begin{dcases}
+                \{\} & \text{if } \ell = init(S_\star) \\
+                \cap \{DA_\bullet(\ell') | (\ell', \ell) \in flow(S_\star)\} &
+                \text{otherwise}\\
+        \end{dcases}\\
+        DA_{\bullet}(\ell) &= (DA_{\circ}(\ell) \setminus kill_{DA}(B^\ell)) \cup
+        gen_{DA}(B^\ell) & B^\ell \in blocks(S_\star)
+\end{align*}
+
+\section{Intraprozedurale Dominator-Analyse mit PAG}
+
+Die folgende PAG-Lösung enthält keine Fehlerbehandlung.
+
+\lstinputlisting{dominators.optla}
+
+\end{document}
