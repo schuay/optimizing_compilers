@@ -1,0 +1,76 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{comment}
+\usepackage[pdfborder={0 0 0}]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+
+\lstset{
+    language=C++,
+    basicstyle=\ttfamily,
+    captionpos=b,
+    breaklines=true,
+    breakatwhitespace=false,
+    showspaces=false,
+    showtabs=false,
+    numbers=left,
+}
+
+\title{Aufgabe 2: Einfache Konstantenpropagation \\
+       Optimierende Übersetzer WS 2014/2015 \\
+       Technical University of Vienna}
+\author{Jakob Gruber, 0203440 \\
+        Mino Sharkhawy, 1025887}
+
+\begin{document}
+
+\maketitle
+
+\section{Einfache intraprozedurale Konstantenpropagation}
+
+Hier sind einige Ausdrücke aufgelistet, welche, unabhängig von der unbekannten
+Variable $a$, einen konstanten Wert haben. In der linken Spalte sind arithmetische
+und in der Mitte boolesche Ausdrücke. Rechts sind Bitoperationen, wobei davon
+ausgegangen wird, dass die Variable $a$ vorzeichenlos und 16 Bit lang ist.
+
+\begin{align*}
+        a * 0 &= 0 & a \wedge false &= false & a \mathbin{\char`\&} 0 &= 0\\
+        a - a &= 0 & a \vee true &= true & a \mathbin{\char`\|} 0xFFFF &= 0xFFFF\\
+        \frac{a}{a} &= 1 & a \vee \neg a &= true & a \mathbin{\char`\^} a &= 0\\
+\end{align*}
+
+In dem folgenden C-Programm kann der Wert von $c$ nicht mit einfacher
+Konstantenpropagation bestimmt werden. Würde man $c$ jeweils am Ende eines Zweigs der
+If-Anweisung bestimmen, erhält man in allen Fällen $c = 5$. Nach dem If gibt es aber
+zwei unterschiedliche mögliche Werte für $a$ und $b$, welche jetzt nicht mehr als
+Konstanten angenommen werden können. Nachdem keiner der Operanden für $c = a + b$
+bekannt ist, kann für $c$ kein konstanter Wert bestimmt werden.
+
+\begin{lstlisting}
+int main(int argc, int **argv)
+{
+        int a,b,c;
+
+        if (argc > 2) {
+                a = 2;
+                b = 3;
+        } else {
+                a = 3;
+                b = 2;
+        }
+
+        c = a + b;
+
+        return c;
+}
+\end{lstlisting}
+
+\section{Einfache intraprozedurale Konstantenpropagation mit PAG}
+
+Das folgende PAG-Programm implementiert einfache Konstantenpropagation für $SL_1$.
+
+\lstinputlisting{../constprop/constprop.optla}
+
+\end{document}
