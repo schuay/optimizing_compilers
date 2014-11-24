@@ -34,7 +34,8 @@ IfJoin(), _: @;
 DeclareStmt(var_symbol, type), _:
   let varid = varsym_varid(var_symbol);
   in  @ \ [ varid -> top ];
-UndeclareStmt(variables), _: @;
+
+UndeclareStmt(variables), _: kill_vars(variables, @);
 
 FunctionEntry(name), _: @;
 FunctionExit(name, local_vars), _: @;
@@ -46,6 +47,12 @@ statement, _:
   @;
 
 SUPPORT
+
+kill_vars :: *VariableSymbolNT, ConstantFunc -> ConstantFunc;
+kill_vars([!], const_func) = const_func;
+kill_vars(var::vars, const_func) =
+    let varid = varsym_varid(var);
+    in  kill_vars(vars, const_func \ [ varid -> bot ]);
 
 transfer :: Expression, ConstantFunc -> ConstantFunc;
 transfer(expr, const_func) =
