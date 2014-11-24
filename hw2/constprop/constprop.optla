@@ -63,7 +63,8 @@ transfer(expr, const_func) =
 
 constlattice_op :: OpEnum, ConstantLattice, ConstantLattice -> ConstantLattice;
 constlattice_op (op, lhs, rhs) =
-  if ((lhs = bot) || (rhs = bot)) then bot
+  if ((op = MUL) && ((lhs = lift(0)) || (rhs = lift(0)))) then lift(0)
+  else if ((lhs = bot) || (rhs = bot)) then bot
   else if ((lhs = top) || (rhs = top)) then top
   else if ((op = DIV) && (drop(rhs) = 0)) then bot
   else let lval <= lhs;
