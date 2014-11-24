@@ -98,6 +98,7 @@ value_of(expr, const_func) =
     UnsignedLongLongIntVal(value) => lift(snum(val-astullong(value)));
 
     VarRefExp(_) => const_func{!varref_varid(expr)!};
+    AssignInitializer(inner_expr) => value_of(inner_expr, const_func);
 
     AddOp(lhs, rhs) =>
       let lval = value_of(lhs, const_func);

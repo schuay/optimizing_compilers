@@ -20,5 +20,9 @@ int main()
     y = x / 0;
   }
 
+  {
+    int a = 17UL;
+  }
+
   return 0;
 }
