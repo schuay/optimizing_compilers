@@ -85,8 +85,20 @@ snum_op(op, lhs, rhs) =
 value_of :: Expression, ConstantFunc -> ConstantLattice;
 value_of(expr, const_func) =
   case expr of
+    ShortVal(value) => lift(val-astshort(value));
+    UnsignedShortVal(value) => lift(snum(val-astushort(value)));
+
     IntVal(value) => lift(val-astint(value));
+    UnsignedIntVal(value) => lift(snum(val-astuint(value)));
+
+    LongIntVal(value) => lift(val-astlong(value));
+    UnsignedLongVal(value) => lift(snum(val-astulong(value)));
+
+    LongLongIntVal(value) => lift(val-astllong(value));
+    UnsignedLongLongIntVal(value) => lift(snum(val-astullong(value)));
+
     VarRefExp(_) => const_func{!varref_varid(expr)!};
+
     AddOp(lhs, rhs) =>
       let lval = value_of(lhs, const_func);
           rval = value_of(rhs, const_func);
@@ -107,6 +119,7 @@ value_of(expr, const_func) =
       let lval = value_of(lhs, const_func);
           rval = value_of(rhs, const_func);
       in  constlattice_op(DIV, lval, rval);
+
     _ => println("warning: unsupported expression in value_of: ",
                  expr_asttext(expr))
          bot;
