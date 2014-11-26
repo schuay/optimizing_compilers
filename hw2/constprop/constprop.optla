@@ -40,6 +40,8 @@ UndeclareStmt(variables), _: kill_vars(variables, @);
 FunctionEntry(name), _: @;
 FunctionExit(name, local_vars), _: @;
 
+LogicalIf(expr), _: @;
+
 statement, _:
   println("warning: cannot handle ",
           "statement of the form: ",
@@ -63,6 +65,10 @@ transfer(expr, const_func) =
     EqualityOp(_, _) => const_func;
     LessThanOp(_, _) => const_func;
     LessOrEqualOp(_, _) => const_func;
+
+    AndOp(lhs, rhs) => const_func;
+    OrOp(lhs, rhs) => const_func;
+
     _ => println("warning: unsupported expression in transfer: ",
                  expr_asttext(expr))
          const_func;
@@ -106,6 +112,8 @@ value_of(expr, const_func) =
 
     VarRefExp(_) => const_func{!varref_varid(expr)!};
     AssignInitializer(inner_expr) => value_of(inner_expr, const_func);
+
+    BoolValExp(value) => lift(val-astint(value));
 
     AddOp(lhs, rhs) =>
       let lval = value_of(lhs, const_func);
