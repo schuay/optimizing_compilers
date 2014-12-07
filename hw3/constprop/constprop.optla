@@ -78,7 +78,25 @@ DeclareStmt(var_symbol, type), _:
 UndeclareStmt(variables), _:
   (rchbl(@), kill_vars(variables, cfunc(@)));
 
-LogicalIf(expr), _: @;
+LogicalIf(expr), true_edge:
+  let reachable = rchbl(@);
+      const_func = cfunc(@);
+      value = value_of(expr, cfunc(@));
+  in if is_const(value) then
+    let is_true <= value;
+    in (if is_true != 0 then reachable else false, const_func)
+  else
+    (reachable, const_func);
+
+LogicalIf(expr), false_edge:
+  let reachable = rchbl(@);
+      const_func = cfunc(@);
+      value = value_of(expr, cfunc(@));
+  in if is_const(value) then
+    let is_true <= value;
+    in (if is_true = 0 then reachable else false, const_func)
+  else
+    (reachable, const_func);
 
 FunctionEntry(name), _: @;
 FunctionExit(name, local_vars), _: @;
@@ -152,7 +170,7 @@ snum_op(op, lhs, rhs) =
     LT  => if lhs < rhs then 1 else 0;
     LE  => if lhs <= rhs then 1 else 0;
     AND => if (lhs != 0) && (rhs != 0) then 1 else 0;
-    OR  => if (lhs = 0) || (rhs = 0) then 0 else 1;
+    OR  => if (lhs != 0) || (rhs != 0) then 1 else 0;
     _   => println("Unsupported operation in constlattice_op")
            -1;
   endcase;
