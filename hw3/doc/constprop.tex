@@ -1,0 +1,56 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{comment}
+\usepackage[pdfborder={0 0 0}]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+
+\lstset{
+    language=C++,
+    basicstyle=\ttfamily,
+    captionpos=b,
+    breaklines=true,
+    breakatwhitespace=false,
+    showspaces=false,
+    showtabs=false,
+    numbers=left,
+}
+
+\title{Aufgabe 3: Konstantenpropagation mit Bedingungen \\
+       Optimierende Übersetzer WS 2014/2015 \\
+       Technical University of Vienna}
+\author{Jakob Gruber, 0203440 \\
+        Mino Sharkhawy, 1025887}
+
+\begin{document}
+
+\maketitle
+
+\section{Behandlung von Schleifen}
+
+Nachdem Konstantenpropagation kein Loop Unrolling durchf\"uhrt, kann der Returnwert
+folgendes Programms nicht berechnet werden:
+
+\begin{lstlisting}
+int main() {
+    int i = 0;
+    while (i < 1) {
+        i = i + 1;
+    }
+    return i;
+}
+\end{lstlisting}
+
+Falls allerdings der K\"orper der \lstinline|while| Schleife unerreichbar w\"are,
+k\"onnte Konstantenpropagation den endg\"ultigen Wert von \lstinline|i| berechnen.
+Das w\"are zum Beispiel der Fall, wenn initial \lstinline|i = 1| gesetzt wird.
+
+\section{Konstantenpropagation mit Bedingungen mit PAG}
+
+Das folgende PAG-Programm implementiert Konstantenpropagation mit Bedingungen:
+
+\lstinputlisting{../constprop/constprop.optla}
+
+\end{document}
