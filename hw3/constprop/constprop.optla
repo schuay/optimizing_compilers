@@ -30,44 +30,24 @@ PROBLEM ConstantPropagation
 
 TRANSFER
 
-ExprStatement(expr), _:
-  transfer(expr, @);
-
 ScopeStatement(WhileStmt(ExprStatement(expr))), true_edge:
-  let reachable = rchbl(@);
-      const_func = cfunc(@);
-      value = value_of(expr, cfunc(@));
-  in if is_const(value) then
-    let is_true <= value;
-    in (if is_true != 0 then reachable else false, const_func)
-  else
-    (reachable, const_func);
-
+  cond_transfer_true(expr, @);
 ScopeStatement(WhileStmt(ExprStatement(expr))), false_edge:
   @;
 
 ScopeStatement(IfStmt(ExprStatement(expr))), true_edge:
-  let reachable = rchbl(@);
-      const_func = cfunc(@);
-      value = value_of(expr, cfunc(@));
-  in if is_const(value) then
-    let is_true <= value;
-    in (if is_true != 0 then reachable else false, const_func)
-  else
-    (reachable, const_func);
-
+  cond_transfer_true(expr, @);
 ScopeStatement(IfStmt(ExprStatement(expr))), false_edge:
-  let reachable = rchbl(@);
-      const_func = cfunc(@);
-      value = value_of(expr, cfunc(@));
-  in if is_const(value) then
-    let is_true <= value;
-    in (if is_true = 0 then reachable else false, const_func)
-  else
-    (reachable, const_func);
+  cond_transfer_false(expr, @);
+
+LogicalIf(expr), true_edge: cond_transfer_true(expr, @);
+LogicalIf(expr), false_edge: cond_transfer_false(expr, @);
 
 WhileJoin(), _: @;
 IfJoin(), _: @;
+
+ExprStatement(expr), _:
+  transfer(expr, @);
 
 DeclareStmt(var_symbol, type), _:
   let varid = varsym_varid(var_symbol);
@@ -77,26 +57,6 @@ DeclareStmt(var_symbol, type), _:
 
 UndeclareStmt(variables), _:
   (rchbl(@), kill_vars(variables, cfunc(@)));
-
-LogicalIf(expr), true_edge:
-  let reachable = rchbl(@);
-      const_func = cfunc(@);
-      value = value_of(expr, cfunc(@));
-  in if is_const(value) then
-    let is_true <= value;
-    in (if is_true != 0 then reachable else false, const_func)
-  else
-    (reachable, const_func);
-
-LogicalIf(expr), false_edge:
-  let reachable = rchbl(@);
-      const_func = cfunc(@);
-      value = value_of(expr, cfunc(@));
-  in if is_const(value) then
-    let is_true <= value;
-    in (if is_true = 0 then reachable else false, const_func)
-  else
-    (reachable, const_func);
 
 FunctionEntry(name), _: @;
 FunctionExit(name, local_vars), _: @;
@@ -145,6 +105,24 @@ transfer(expr, (true,  const_func)) =
            const_func;
     endcase
   );
+
+cond_transfer_true :: Expression, ConstantTuple -> ConstantTuple;
+cond_transfer_true(expr, (reachable, const_func)) = 
+  let value = value_of(expr, const_func);
+  in if is_const(value) then
+    let is_true <= value;
+    in (if is_true != 0 then reachable else false, const_func)
+  else
+    (reachable, const_func);
+
+cond_transfer_false :: Expression, ConstantTuple -> ConstantTuple;
+cond_transfer_false(expr, (reachable, const_func)) = 
+  let value = value_of(expr, const_func);
+  in if is_const(value) then
+    let is_true <= value;
+    in (if is_true = 0 then reachable else false, const_func)
+  else
+    (reachable, const_func);
 
 constlattice_op :: OpEnum, ConstantLattice, ConstantLattice -> ConstantLattice;
 constlattice_op (op, lhs, rhs) =
