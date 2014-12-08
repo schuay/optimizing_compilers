@@ -124,17 +124,19 @@ cond_transfer_false(expr, (reachable, const_func)) =
   else
     (reachable, const_func);
 
-constlattice_op :: OpEnum, ConstantLattice, ConstantLattice -> ConstantLattice;
-constlattice_op (op, lhs, rhs) =
-  if ((op = MUL) && ((lhs = lift(0)) || (rhs = lift(0)))) then lift(0)
-  else if ((op = AND) && (lhs = lift(0) || rhs = lift(0))) then lift(0)
-  else if ((op = OR) && (lhs = lift(1) || rhs = lift(1))) then lift(1)
-  else if ((lhs = bot) || (rhs = bot)) then bot
-  else if ((lhs = top) || (rhs = top)) then top
-  else if ((op = DIV) && (drop(rhs) = 0)) then bot
-  else let lval <= lhs;
-           rval <= rhs;
-       in lift(snum_op(op, lval, rval));
+binary_op :: OpEnum, Expression, Expression, ConstantFunc -> ConstantLattice;
+binary_op (op, lexpr, rexpr, const_func) =
+  let lhs = value_of(lexpr, const_func);
+      rhs = value_of(rexpr, const_func);
+  in  if ((op = MUL) && ((lhs = lift(0)) || (rhs = lift(0)))) then lift(0)
+      else if ((op = AND) && (lhs = lift(0) || rhs = lift(0))) then lift(0)
+      else if ((op = OR) && (lhs = lift(1) || rhs = lift(1))) then lift(1)
+      else if ((lhs = bot) || (rhs = bot)) then bot
+      else if ((lhs = top) || (rhs = top)) then top
+      else if ((op = DIV) && (drop(rhs) = 0)) then bot
+      else let lval <= lhs;
+               rval <= rhs;
+           in lift(snum_op(op, lval, rval));
        
 snum_op :: OpEnum, snum, snum -> snum;
 snum_op(op, lhs, rhs) =
@@ -149,7 +151,7 @@ snum_op(op, lhs, rhs) =
     LE  => if lhs <= rhs then 1 else 0;
     AND => if (lhs != 0) && (rhs != 0) then 1 else 0;
     OR  => if (lhs != 0) || (rhs != 0) then 1 else 0;
-    _   => println("Unsupported operation in constlattice_op")
+    _   => println("Unsupported operation in snum_op")
            -1;
   endcase;
 
@@ -173,52 +175,19 @@ value_of(expr, const_func) =
 
     BoolValExp(value) => lift(val-astint(value));
 
-    AddOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(ADD, lval, rval);
-    SubtractOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(SUB, lval, rval);
-    MultiplyOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(MUL, lval, rval);
-    DivideOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(DIV, lval, rval);
-    IntegerDivideOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(DIV, lval, rval);
+    AddOp(lhs, rhs) => binary_op(ADD, lhs, rhs, const_func);
+    SubtractOp(lhs, rhs) => binary_op(SUB, lhs, rhs, const_func);
+    MultiplyOp(lhs, rhs) => binary_op(MUL, lhs, rhs, const_func);
+    DivideOp(lhs, rhs) => binary_op(DIV, lhs, rhs, const_func);
+    IntegerDivideOp(lhs, rhs) => binary_op(DIV, lhs, rhs, const_func);
 
-    EqualityOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(EQ, lval, rval);
-    NotEqualOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(NE, lval, rval);
-    LessThanOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(LT, lval, rval);
-    LessOrEqualOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(LE, lval, rval);
+    EqualityOp(lhs, rhs) => binary_op(EQ, lhs, rhs, const_func);
+    NotEqualOp(lhs, rhs) => binary_op(NE, lhs, rhs, const_func);
+    LessThanOp(lhs, rhs) => binary_op(LT, lhs, rhs, const_func);
+    LessOrEqualOp(lhs, rhs) => binary_op(LE, lhs, rhs, const_func);
 
-    AndOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(AND, lval, rval);
-    OrOp(lhs, rhs) =>
-      let lval = value_of(lhs, const_func);
-          rval = value_of(rhs, const_func);
-      in  constlattice_op(OR, lval, rval);
+    AndOp(lhs, rhs) => binary_op(AND, lhs, rhs, const_func);
+    OrOp(lhs, rhs) => binary_op(OR, lhs, rhs, const_func);
     NotOp(expr) => 
       let value = value_of(expr, const_func);
       in  if is_const(value) then
