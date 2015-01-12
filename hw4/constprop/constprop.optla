@@ -1,0 +1,282 @@
+SET
+
+DOMAIN
+  ConstantLattice = flat(snum)
+  ConstantFunc = VariableId -> ConstantLattice
+  ConstantTuple = bool * ConstantFunc
+  OpEnum = ( ADD
+           , SUB
+           , MUL
+           , DIV
+           , EQ
+           , NE
+           , LT
+           , LE
+           , AND
+           , OR
+           || ADD | SUB)
+ENDDOMAIN
+
+PROBLEM ConstantPropagation
+  direction:  forward
+  carrier:    ConstantTuple
+  init_start: (true,  [-> bot])
+  init:       (false, [-> top])
+
+  equal:      constlattice_equal
+  combine:    constlattice_combine
+  retfunc:    constlattice_retfunc
+  widening:   constlattice_widening
+
+TRANSFER
+
+ScopeStatement(WhileStmt(ExprStatement(expr))), true_edge:
+  cond_transfer_true(expr, @);
+ScopeStatement(WhileStmt(ExprStatement(expr))), false_edge:
+  @;
+
+ScopeStatement(IfStmt(ExprStatement(expr))), true_edge:
+  cond_transfer_true(expr, @);
+ScopeStatement(IfStmt(ExprStatement(expr))), false_edge:
+  cond_transfer_false(expr, @);
+
+LogicalIf(expr), true_edge: cond_transfer_true(expr, @);
+LogicalIf(expr), false_edge: cond_transfer_false(expr, @);
+
+WhileJoin(), _: @;
+IfJoin(), _: @;
+
+ExprStatement(expr), _:
+  transfer(expr, @);
+
+DeclareStmt(var_symbol, type), _:
+  let varid = varsym_varid(var_symbol);
+  in if rchbl(@) then
+    (true, cfunc(@) \ [ varid -> top ])
+  else @;
+
+ArgumentAssignment(lhs, rhs), _:
+  let varid = varref_varid(lhs);
+      const_func = cfunc(@);
+      reachable = rchbl(@);
+  in (reachable, const_func \ [ varid -> value_of(rhs, const_func) ]);
+
+ReturnAssignment(lhs, rhs), _:
+  let varid_lhs = varsym_varid(lhs);
+      varid_rhs = varsym_varid(rhs);
+      const_func = cfunc(@);
+      reachable = rchbl(@);
+  in (reachable, const_func \ [ varid_lhs -> const_func{!varid_rhs!}, varid_rhs -> bot ]);
+
+ParamAssignment(lhs, rhs), _:
+  let varid_lhs = varsym_varid(lhs);
+      varid_rhs = varsym_varid(rhs);
+      const_func = cfunc(@);
+      reachable = rchbl(@);
+  in (reachable, const_func \ [ varid_lhs -> const_func{!varid_rhs!}, varid_rhs -> bot ]);
+
+UndeclareStmt(variables), _:
+  (rchbl(@), kill_vars(variables, cfunc(@)));
+
+FunctionCall(funcname, params), local_edge:
+  (rchbl(@), kill_vars(params, cfunc(@)));
+FunctionCall(funcname, params), call_edge:
+  (rchbl(@), copy_vars(params, cfunc(@)));
+FunctionReturn(funcname, params), _: @;
+
+FunctionEntry(name), _: @;
+FunctionExit(name, local_vars) as stmt, _:
+  (rchbl(@), kill_tmp_vars(kill_vars(local_vars, cfunc(@))));
+
+statement, _:
+  println("warning: cannot handle ",
+          "statement of the form: ",
+          stmt_asttext(statement))
+  @;
+
+SUPPORT
+
+is_const :: ConstantLattice -> bool;
+is_const(lattice) =
+  case lattice of
+    bot => false;
+    top => false;
+    _   => true;
+  endcase;
+
+rchbl :: ConstantTuple -> bool;
+rchbl((reachable, _)) = reachable;
+
+cfunc :: ConstantTuple -> ConstantFunc;
+cfunc((_, const_func)) = const_func;
+
+copy_vars :: *VariableSymbolNT, ConstantFunc -> ConstantFunc;
+copy_vars([!], const_func) = [-> bot];
+copy_vars(var::vars, const_func) =
+    let varid = varsym_varid(var);
+    in  copy_vars(vars, const_func) \ [ varid -> const_func{!varid!} ];
+
+kill_vars :: *VariableSymbolNT, ConstantFunc -> ConstantFunc;
+kill_vars([!], const_func) = const_func;
+kill_vars(var::vars, const_func) =
+    let varid = varsym_varid(var);
+    in  kill_vars(vars, const_func \ [ varid -> bot ]);
+
+kill_tmp_vars :: ConstantFunc -> ConstantFunc;
+kill_tmp_vars(const_func) = [ (i, v) -> bot !! (i, v) <- const_func \ bot, if ! is_tmpvarid(i) || varid_str(i) = "$tmpvar$retvar" ];
+
+transfer :: Expression, ConstantTuple -> ConstantTuple;
+transfer(_,    (false, const_func)) = (false, const_func);
+transfer(expr, (true,  const_func)) =
+  (true,
+    case expr of
+      AssignOp(lhs, rhs) => const_func \ [ varref_varid(lhs) ->
+                                           value_of(rhs, const_func)
+                                         ];
+      EqualityOp(_, _) => const_func;
+      LessThanOp(_, _) => const_func;
+      LessOrEqualOp(_, _) => const_func;
+      _ => println("warning: unsupported expression in transfer: ",
+                   expr_asttext(expr))
+           const_func;
+    endcase
+  );
+
+is_varref :: Expression -> bool;
+is_varref(VarRefExp(_)) = true;
+is_varref(_) = false;
+
+// TODO: is this necessary?
+forced_values :: Expression, ConstantFunc -> ConstantFunc;
+forced_values(EqualityOp(lhs, rhs), const_func) =
+  let val_l = value_of(lhs, const_func);
+      val_r = value_of(rhs, const_func);
+      cfunc = const_func;
+  in let cfunc = if is_const(val_r) && is_varref(lhs) then cfunc \ [ varref_varid(lhs) -> val_r ] else cfunc;
+     in if is_const(val_l) && is_varref(rhs) then cfunc \ [ varref_varid(rhs) -> val_l ] else cfunc;
+forced_values(_, const_func) = const_func;
+
+cond_transfer_true :: Expression, ConstantTuple -> ConstantTuple;
+cond_transfer_true(expr, (reachable, const_func)) = 
+  let value = value_of(expr, const_func);
+      new_const_func = forced_values(expr, const_func);
+  in if is_const(value) then
+    let is_true <= value;
+    in (if is_true != 0 then reachable else false, new_const_func)
+  else
+    (reachable, new_const_func);
+
+cond_transfer_false :: Expression, ConstantTuple -> ConstantTuple;
+cond_transfer_false(expr, (reachable, const_func)) = 
+  let value = value_of(expr, const_func);
+      new_const_func = const_func;
+  in if is_const(value) then
+    let is_true <= value;
+    in (if is_true = 0 then reachable else false, new_const_func)
+  else
+    (reachable, new_const_func);
+
+binary_op :: OpEnum, Expression, Expression, ConstantFunc -> ConstantLattice;
+binary_op (op, lexpr, rexpr, const_func) =
+  let lhs = value_of(lexpr, const_func);
+      rhs = value_of(rexpr, const_func);
+  in  if ((op = MUL) && ((lhs = lift(0)) || (rhs = lift(0)))) then lift(0)
+      else if ((op = AND) && (lhs = lift(0) || rhs = lift(0))) then lift(0)
+      else if ((op = OR) && (lhs = lift(1) || rhs = lift(1))) then lift(1)
+      else if ((lhs = bot) || (rhs = bot)) then bot
+      else if ((lhs = top) || (rhs = top)) then top
+      else if ((op = DIV) && (drop(rhs) = 0)) then bot
+      else let lval <= lhs;
+               rval <= rhs;
+           in lift(snum_op(op, lval, rval));
+       
+snum_op :: OpEnum, snum, snum -> snum;
+snum_op(op, lhs, rhs) =
+  case op of
+    ADD => lhs + rhs;
+    SUB => lhs - rhs;
+    MUL => lhs * rhs;
+    DIV => lhs / rhs;
+    EQ  => if lhs = rhs then 1 else 0;
+    NE  => if lhs != rhs then 1 else 0;
+    LT  => if lhs < rhs then 1 else 0;
+    LE  => if lhs <= rhs then 1 else 0;
+    AND => if (lhs != 0) && (rhs != 0) then 1 else 0;
+    OR  => if (lhs != 0) || (rhs != 0) then 1 else 0;
+    _   => println("Unsupported operation in snum_op")
+           -1;
+  endcase;
+
+value_of :: Expression, ConstantFunc -> ConstantLattice;
+value_of(expr, const_func) =
+  case expr of
+    ShortVal(value) => lift(val-astshort(value));
+    UnsignedShortVal(value) => lift(snum(val-astushort(value)));
+
+    IntVal(value) => lift(val-astint(value));
+    UnsignedIntVal(value) => lift(snum(val-astuint(value)));
+
+    LongIntVal(value) => lift(val-astlong(value));
+    UnsignedLongVal(value) => lift(snum(val-astulong(value)));
+
+    LongLongIntVal(value) => lift(val-astllong(value));
+    UnsignedLongLongIntVal(value) => lift(snum(val-astullong(value)));
+
+    VarRefExp(_) => const_func{!varref_varid(expr)!};
+    AssignInitializer(inner_expr) => value_of(inner_expr, const_func);
+
+    BoolValExp(value) => lift(val-astint(value));
+
+    AddOp(lhs, rhs) => binary_op(ADD, lhs, rhs, const_func);
+    SubtractOp(lhs, rhs) => binary_op(SUB, lhs, rhs, const_func);
+    MultiplyOp(lhs, rhs) => binary_op(MUL, lhs, rhs, const_func);
+    DivideOp(lhs, rhs) => binary_op(DIV, lhs, rhs, const_func);
+    IntegerDivideOp(lhs, rhs) => binary_op(DIV, lhs, rhs, const_func);
+
+    EqualityOp(lhs, rhs) => binary_op(EQ, lhs, rhs, const_func);
+    NotEqualOp(lhs, rhs) => binary_op(NE, lhs, rhs, const_func);
+    LessThanOp(lhs, rhs) => binary_op(LT, lhs, rhs, const_func);
+    LessOrEqualOp(lhs, rhs) => binary_op(LE, lhs, rhs, const_func);
+
+    AndOp(lhs, rhs) => binary_op(AND, lhs, rhs, const_func);
+    OrOp(lhs, rhs) => binary_op(OR, lhs, rhs, const_func);
+    NotOp(expr) => 
+      let value = value_of(expr, const_func);
+      in  if is_const(value) then
+            if drop(value) = 0 then lift(1) else lift(0)
+          else value;
+
+    _ => println("warning: unsupported expression in value_of: ",
+                 expr_asttext(expr))
+         bot;
+  endcase;
+
+meet :: ConstantLattice, ConstantLattice -> ConstantLattice;
+meet(lhs, rhs) = (lhs glb rhs);
+
+join :: ConstantLattice, ConstantLattice -> ConstantLattice;
+join(lhs, rhs) = (lhs lub rhs);
+
+constlattice_equal :: ConstantTuple, ConstantTuple -> bool;
+constlattice_equal(f, g) = (f = g);
+
+constlattice_combine :: ConstantTuple, ConstantTuple -> ConstantTuple;
+constlattice_combine(f, g) =
+  let f_rchbl = rchbl(f);
+      g_rchbl = rchbl(g);
+  in if f_rchbl && !g_rchbl then (true, cfunc(f))
+     else if !f_rchbl && g_rchbl then (true, cfunc(g))
+     else (rchbl(f) || rchbl(g), crunch(cfunc(f), cfunc(g), meet));
+
+constlattice_retfunc :: ConstantTuple, ConstantTuple -> ConstantTuple;
+constlattice_retfunc(f, g) =
+  let f_rchbl = rchbl(f);
+      g_rchbl = rchbl(g);
+  in if f_rchbl && !g_rchbl then (true, cfunc(f))
+     else if !f_rchbl && g_rchbl then (true, cfunc(g))
+     else (rchbl(f) || rchbl(g), crunch(cfunc(f), cfunc(g), join));
+
+constlattice_widening :: ConstantTuple, ConstantTuple -> ConstantTuple;
+constlattice_widening(f, g) = g;
+
+/* vim: set ts=2 sw=2: */
